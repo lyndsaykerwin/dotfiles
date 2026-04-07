@@ -65,12 +65,14 @@ These were intentionally left out:
 
 ## Windows note
 
-Real symlinks on Windows require either admin rights or "Developer Mode" turned on (Settings → For Developers → Developer Mode). Lyndsay's machine doesn't have either, so on Windows the install script falls back to **copying files** instead of linking them. That means:
+Real symlinks on Windows need TWO things:
 
-- Cloud Ubuntu sessions (Linux): real symlinks. Edit anywhere, it syncs everywhere automatically. ✨
-- Lyndsay's local Windows machine: file copies. The dotfiles repo is the source of truth — **edit files inside `~/dotfiles/claude/...` directly**, then re-run `install.sh` to push the new copies into `~/.claude/`. Editing inside `~/.claude/` directly won't propagate back to the repo.
+1. **Developer Mode** turned on (Settings → For Developers → Developer Mode → On). One-time toggle, no reboot.
+2. The `MSYS=winsymlinks:nativestrict` environment variable, which tells Git Bash to actually create native Windows symlinks instead of silently copying. The install script sets this for you automatically — you don't need to do anything.
 
-The install script auto-detects which mode it's in and tells you on every run.
+With both in place, editing `~/.claude/CLAUDE.md` and editing the file inside this repo are the same operation: they're the same file under the hood. Edit either location → run `git add/commit/push` from `~/dotfiles` → on any other machine, `git pull` and you're synced.
+
+If Developer Mode isn't on, the install script falls back to plain file copies and prints a message telling you so. In that mode the dotfiles repo is the source of truth — edit inside the repo, then re-run install.sh to push copies into `~/.claude/`.
 
 ## Updating
 

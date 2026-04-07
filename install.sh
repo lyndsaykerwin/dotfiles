@@ -22,6 +22,11 @@
 
 set -euo pipefail
 
+# On Git Bash for Windows, MSYS needs this to actually create native
+# Windows symlinks instead of silently copying. Harmless on Linux/Mac.
+# Requires Developer Mode ON in Windows (Settings → For developers).
+export MSYS="${MSYS:-}${MSYS:+ }winsymlinks:nativestrict"
+
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="${HOME}/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
@@ -74,8 +79,10 @@ link() {
     return
   fi
 
-  # Not a symlink, but content already matches the source — done.
-  if [ -e "${dest}" ] && same_content "${src}" "${dest}"; then
+  # Not a symlink, but content already matches the source.
+  # Only short-circuit when we're in copy-mode — if symlinks are
+  # supported, we still want to upgrade copies to real symlinks.
+  if [ "${USE_SYMLINKS}" = false ] && [ -e "${dest}" ] && same_content "${src}" "${dest}"; then
     echo "  ✓ already up to date (copy): ${dest}"
     return
   fi
