@@ -1,0 +1,3 @@
+{
+  "_comment": "MCP servers are NOT configured in this file. Lyndsay's Gmail, HubSpot, Google Calendar, Slack, Vercel, and Reply.io MCPs are all server-side connections managed at claude.ai under Settings → Connectors. They follow the Claude account, not the machine, so they appear automatically in any Claude Code session signed in to that account. This file exists as a placeholder so future-Lyndsay isn't confused about where MCPs live."
+}

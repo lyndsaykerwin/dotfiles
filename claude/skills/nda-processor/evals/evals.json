@@ -1,0 +1,23 @@
+{
+  "skill_name": "nda-processor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just got an NDA from a potential investor. It's in my Downloads folder, something like 'Project Nourish - NDA.docx'. Can you review it and tell me what I should watch out for before I sign?",
+      "expected_output": "Identifies the file, extracts text, applies the full NDA checklist. Flags the one-sided indemnification, 24-month non-solicitation period, Ontario governing law, DCF regulatory compliance requirements. Notes all fill-in fields in the signature block. Presents findings in plain language with red flags highlighted.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I have two NDAs to compare - one from Rio AI (the MNDA in my Downloads, something like 'Great Elm_Rio_MNDA.docx') and one for Project Nourish. Can you compare them side by side and tell me which one is more favorable to us as the recipient?",
+      "expected_output": "Finds both files, extracts text from each, builds a comparison table covering type (mutual vs one-way), non-solicitation (12 vs 24 months), indemnification (none vs one-sided), governing law (England vs Ontario), confidentiality period (5 years each). Provides narrative summary that Rio is more favorable due to mutual structure, shorter non-solicit, and no indemnity clause.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Let's fill in the Rio MNDA. Our company is Great Elm Partners LLC, registered at 55 Hudson Yards, New York, NY 10001. I'm Lyndsay Kerwin, Founder. Date it today. Then give me both the filled docx and a PDF.",
+      "expected_output": "Unpacks the DOCX, identifies entity name field ([Great Elm Capital entity name]), address field ([Insert Address]), and signature block fields (Name, Title, Signature, Date). Confirms mapping with user. Edits XML to fill all fields. Repacks to 'Great Elm_Rio_MNDA - Filled.docx'. Converts to PDF via LibreOffice. Names output files clearly.",
+      "files": []
+    }
+  ]
+}

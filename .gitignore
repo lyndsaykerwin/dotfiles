@@ -1,0 +1,10 @@
+# Anything sensitive or per-machine should NEVER land in this repo.
+.credentials.json
+*.credentials*
+.env
+.env.*
+settings.local.json
+
+# OS junk
+.DS_Store
+Thumbs.db

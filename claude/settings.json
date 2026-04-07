@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f tsconfig.json ]; then npx tsc --noEmit 2>&1 | tail -10 && npm run build 2>&1 | tail -10; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.py) python -m py_compile \"$CLAUDE_FILE_PATH\" && echo '✓ syntax ok' || echo '✗ syntax error' ;; *.ts) npx tsc --noEmit \"$CLAUDE_FILE_PATH\" 2>&1 | head -5 ;; esac"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.py) python -m py_compile \"$CLAUDE_FILE_PATH\" && echo '✓ syntax ok' || echo '✗ syntax error' ;; *.ts) npx tsc --noEmit \"$CLAUDE_FILE_PATH\" 2>&1 | head -5 ;; esac"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "slack@claude-plugins-official": false
+  },
+  "autoUpdatesChannel": "latest",
+  "voiceEnabled": true,
+  "skipDangerousModePermissionPrompt": true
+}
