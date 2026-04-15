@@ -3,6 +3,16 @@
     "defaultMode": "bypassPermissions"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -d /root/dotfiles/.git ]; then git -C /root/dotfiles pull --ff-only --quiet 2>/dev/null || true; fi"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash(git commit)",
