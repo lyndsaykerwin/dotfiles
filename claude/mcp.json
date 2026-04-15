@@ -1,3 +1,9 @@
 {
-  "_comment": "MCP servers are NOT configured in this file. Lyndsay's Gmail, HubSpot, Google Calendar, Slack, Vercel, and Reply.io MCPs are all server-side connections managed at claude.ai under Settings → Connectors. They follow the Claude account, not the machine, so they appear automatically in any Claude Code session signed in to that account. This file exists as a placeholder so future-Lyndsay isn't confused about where MCPs live."
+  "_comment": "User-level MCP servers for Claude Code (web + local). Bootstrapped into every session via ~/.claude/mcp.json symlink → this file. Only REMOTE (http/sse) MCPs work in Claude Code web sandboxes; local stdio MCPs must stay in a separate local-only config. claude.ai → Settings → Connectors does NOT inject into Claude Code sandboxes (verified April 2026), so anything needed in coding sessions lives HERE.",
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp"
+    }
+  }
 }
