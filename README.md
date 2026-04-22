@@ -9,7 +9,7 @@ dotfiles/
 ├── claude/
 │   ├── CLAUDE.md       # global identity / preferences (loaded in every project)
 │   ├── settings.json   # permissions + hooks (auto syntax-check, pre-commit build check)
-│   ├── mcp.json        # placeholder — MCPs are managed at claude.ai, not here
+│   ├── mcp.json        # MCP servers available in every Claude Code session (remote/http only)
 │   └── skills/         # all my personal skills (brainstorming, writing-plans, etc.)
 ├── install.sh          # creates symlinks from ~/.claude/ → this repo (with backups)
 ├── bootstrap.sh        # one-shot setup for a fresh machine
@@ -61,7 +61,8 @@ These were intentionally left out:
 - **`settings.local.json`** — machine-specific overrides.
 - **`agent-memory/`, `cache/`, `history.jsonl`, `projects/`, `sessions/`, etc.** — local state and history. Tied to a specific machine and would be useless on another one.
 - **`agents/` (custom agents)** — currently unused, kept on the original machine only. Add later if I start using them.
-- **MCP server configs** — Lyndsay's Gmail/HubSpot/Calendar/Slack/Vercel MCPs are managed in claude.ai under Settings → Connectors. They follow the account, not the machine. Nothing to sync here.
+- **Local stdio MCP servers** — any MCP that runs as a local process (e.g. a tool that shells out to your machine) can't work in a cloud sandbox. Those stay in a separate machine-specific config and are not synced here.
+- **claude.ai Connectors** — MCPs you add under claude.ai → Settings → Connectors are account-level and do *not* inject into Claude Code sessions (verified April 2026). If you need an MCP in Claude Code sessions, add it to `mcp.json` in this repo instead. Currently synced here: **Supabase** and **Vercel** (both remote/http, so they work everywhere).
 
 ## Windows note
 
