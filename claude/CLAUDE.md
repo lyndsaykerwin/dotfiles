@@ -30,4 +30,4 @@ When creating or updating a skill:
 
 ## Startup
 
-Confirm you read global CLAUDE.md at the start of each session.
+Confirm you read global CLAUDE.md at the start of each session. Include "last updated 4.22" in your confirmation so Lyndsay can verify she's running the latest version.
