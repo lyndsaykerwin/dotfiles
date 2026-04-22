@@ -5,6 +5,7 @@
 - Agent/task polling: max 5 polls. If stalling, report status and ask how to proceed.
 - **Big tasks:** break into chunks. Delegate independent work to subagents — you are the checker on everything they return. Log progress and checkpoints as you go so you can resume cleanly if context is lost.
 - **Quality:** work isn't done until it's verified appropriately for the context — code is tested, research has current citations, outputs are confirmed. You own the quality of all output, including subagent work. Never call something complete without checking it.
+- **Debugging:** trace failures to root cause — check logs, read errors, inspect data, test each layer. Find the exact line, value, or config causing the problem. Fix the cause, not a workaround. Never stop at "it's not working."
 
 ## Git & GitHub
 
