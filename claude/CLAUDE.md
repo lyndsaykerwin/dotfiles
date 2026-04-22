@@ -1,48 +1,33 @@
-## General Behavior
+## Behavior
 
-When you get stuck or hit a tool limitation, immediately say so and move on to the next item. Do not stall or wait for user to say 'continue'. If a batch task hits a rate limit or tool error, save progress, summarize what's done vs. remaining, and propose next steps.
+- **Non-coder.** Explain all technical steps in plain English. Think: CS professor talking to their grandma.
+- When stuck or hitting a tool limit, say so immediately and move on. Never stall waiting for "continue."
+- Agent/task polling: max 5 polls. If stalling, report status and ask how to proceed.
+- **Big tasks:** break into chunks. Delegate independent work to subagents — you are the checker on everything they return. Log progress and checkpoints as you go so you can resume cleanly if context is lost.
+- **Quality:** work isn't done until it's verified appropriately for the context — code is tested, research has current citations, outputs are confirmed. You own the quality of all output, including subagent work. Never call something complete without checking it.
 
-When using agent teams / Task tool: Do NOT poll TaskOutput more than 5 times in a row. If agents are stalling, report status and ask me how to proceed instead of polling indefinitely.
+## Git & GitHub
 
-## General Behavior
+- Always explain git state in plain English before acting — what's changed, where it is (local/pushed/merged), what the next step does. Never assume she knows branch/commit/push/PR/merge.
+- **Solo work:** merge directly to main. Don't leave things on a branch without saying so — that's confusing. Only pause if there's a conflict.
+- **Team work:** branch off main for every change, write clear commit messages, keep PRs small and focused, always request a review before merging, never merge your own PR, never force-push to shared branches, resolve all review comments before merging.
 
-**Important** I can't write code, so I need simple step by step explanation for technical work. Act like you're a computer science professor explaining a technical concept to your grandma.
+## Tools
 
-## Tools & Browser
-
-For any browser automation tasks (navigating websites, filling forms, scraping data, testing web apps), use the agent-browser skill — NOT the Chrome extension MCP. Do not ask me to sign in or install a Chrome extension. Just use agent-browser directly.
-
-When I ask about finding a skill, discovering a skill, or whether a skill exists for something, always use the find-skills skill to search first before suggesting anything custom.
+- **Browser tasks** (navigating sites, filling forms, scraping, testing): use `agent-browser` skill. Never use Chrome extension MCP. Never ask her to sign in or install an extension.
+- **Email**: use Gmail MCP tools directly — not browser automation.
+- **Skills lookup**: always run `find-skills` skill before suggesting a custom solution.
 
 ## Skills
 
-All skills live in the global location: `C:\Users\Courtney Stuart\.claude\skills\`
+Skills live in `~/.claude/skills/` (symlinked to the dotfiles repo — editing either location is the same file, don't fight it).
 
-This makes them available in every project automatically. Current skills:
+**When doing coding work, you must invoke the `using-superpowers` skill.**
 
-- **Workflow:** `brainstorming`, `writing-plans`, `executing-plans`, `finishing-a-development-branch`
-- **Quality:** `verification-before-completion`, `test-driven-development`, `systematic-debugging`
-- **Code review:** `requesting-code-review`, `receiving-code-review`
-- **Agents:** `subagent-driven-development`, `dispatching-parallel-agents`, `using-superpowers`, `heartbeat`
-- **Frontend:** `frontend-design`, `web-design-guidelines`
-- **Data:** `scraped-data-cleaning`, `cost-audit`
-- **Tools:** `agent-browser`, `find-skills`, `skill-creator`, `writing-skills`, `using-git-worktrees`, `desktop-to-codespaces`
-- **Desktop:** `docx`, `email-writing`, `google-workspace`, `nda-processor`
-
-When creating or updating any skill:
+When creating or updating a skill:
 1. Save to `~/.claude/skills/<skill-name>/SKILL.md`
-2. After saving, verify the skill appears in the auto-loaded skills list
+2. Verify it appears in the auto-loaded skills list
 
-(Skills directory IS a symlink to my dotfiles repo — edits in either location update both. Don't fight it.)
+## Startup
 
-## GitHub & Git — Hand-Holding Mode
-
-Lyndsay is a non-coder. Before any git action, say in plain English where things stand (which branch, what's staged vs committed vs pushed vs merged) and translate jargon — never assume she remembers what branch/commit/push/PR mean. Always remind her explicitly when work is committed-but-not-pushed, or pushed-but-not-merged: those don't count as "live" yet.
-
-## Gmail MCP
-
-A Gmail MCP server is connected for email tasks (searching, reading messages/threads, drafting, managing labels). Use the Gmail MCP tools directly for any email-related requests — do not use browser automation for Gmail.
-
-## Verification
-
-Tell me you read the global Claude.MD on start up.
+Confirm you read global CLAUDE.md at the start of each session.
