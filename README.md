@@ -22,18 +22,31 @@ Normally, Claude Code reads your config from `~/.claude/`. Every machine has its
 
 ## How to use it on a new machine
 
-Paste this one line into the terminal (or into the Claude Code cloud sandbox's setup-script field):
+### macOS (laptop / desktop)
+
+Open **Terminal** (Cmd+Space → "Terminal") and paste this one line:
+
+```bash
+git clone https://github.com/lyndsaykerwin/dotfiles.git ~/dotfiles && bash ~/dotfiles/install.sh
+```
+
+If git isn't installed yet, the first `git` command will pop up a macOS dialog asking to install the Xcode Command Line Tools. Click **Install**, wait a few minutes, then re-run the line above.
+
+### Linux / Claude Code cloud sandbox
+
+Paste this into the terminal (or into the cloud sandbox's setup-script field):
 
 ```bash
 sudo apt-get install -y git && git clone https://github.com/lyndsaykerwin/dotfiles.git ~/dotfiles && bash ~/dotfiles/install.sh
 ```
 
-What that does, in order:
-1. **`sudo apt-get install -y git`** — installs git if it isn't already there. (No-op if it already is.)
+### What that does, in order
+
+1. Installs git if it isn't already there (Linux only — Mac handles this via Xcode Command Line Tools).
 2. **`git clone ... ~/dotfiles`** — downloads this whole repo to a folder called `dotfiles` in your home directory.
 3. **`bash ~/dotfiles/install.sh`** — runs the install script, which makes the symlinks.
 
-`bootstrap.sh` is a fancier version of the same thing — it also pulls the latest if the repo is already cloned. You can use either.
+`bootstrap.sh` is a fancier version of the same thing — it also pulls the latest if the repo is already cloned, and it knows how to install git on macOS, Debian/Ubuntu, or via Homebrew. You can use either.
 
 ## What `install.sh` actually does
 
