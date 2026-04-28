@@ -18,7 +18,9 @@
 ## Tools
 
 - **Browser tasks** (navigating sites, filling forms, scraping, testing): use `agent-browser` skill. Never use Chrome extension MCP. Never ask her to sign in or install an extension.
-- **Email**: use Gmail MCP tools directly — not browser automation.
+- **Email (Lyndsay's gmail)**: use Gmail MCP tools directly — not browser automation. Agents have their own Agentmail account (separate from Lyndsay's gmail) for test signups, bookings, and any task where exposing Lyndsay's personal address would be wrong. **Use this instead of Lyndsay's gmail** whenever an email address an agent controls is needed.
+- **Credentials file (LOCAL ONLY, not in dotfiles repo):** `~/.claude/agentmail-credentials.json` — read this when you need the address or API key.
+- The credentials file is `chmod 600` and is NOT a symlink into `~/dotfiles/`. **Never** copy its contents into CLAUDE.md, settings.json, mcp.json, skills/, or anywhere else under `~/dotfiles/` — those are published to a public GitHub repo.
 - **Skills lookup**: always run `find-skills` skill before suggesting a custom solution.
 
 ## Skills
