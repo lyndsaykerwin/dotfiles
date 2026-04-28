@@ -8,10 +8,10 @@ My Claude Code config, synced across every machine I use — laptop, work comput
 dotfiles/
 ├── claude/
 │   ├── CLAUDE.md       # global identity / preferences (loaded in every project)
-│   ├── settings.json   # permissions + hooks (auto syntax-check, pre-commit build check)
-│   ├── mcp.json        # MCP servers available in every Claude Code session (remote/http only)
+│   ├── settings.json   # permissions + hooks (auto syntax-check, pre-commit build check, MCP seeding)
+│   ├── mcp.json        # master MCP server list — copied into projects as .mcp.json (remote/http only)
 │   └── skills/         # all my personal skills (brainstorming, writing-plans, etc.)
-├── install.sh          # creates symlinks from ~/.claude/ → this repo (with backups)
+├── install.sh          # symlinks ~/.claude/ → this repo + seeds .mcp.json into the current project
 ├── bootstrap.sh        # one-shot setup for a fresh machine
 └── README.md
 ```
@@ -59,12 +59,21 @@ It's safe to run as many times as you want. Running it twice won't double-back-u
 
 Files it manages:
 
-| Symlink                         | Points at                       |
-| ------------------------------- | ------------------------------- |
-| `~/.claude/CLAUDE.md`           | `~/dotfiles/claude/CLAUDE.md`   |
+| Symlink                         | Points at                         |
+| ------------------------------- | --------------------------------- |
+| `~/.claude/CLAUDE.md`           | `~/dotfiles/claude/CLAUDE.md`     |
 | `~/.claude/settings.json`       | `~/dotfiles/claude/settings.json` |
-| `~/.claude/mcp.json`            | `~/dotfiles/claude/mcp.json`    |
-| `~/.claude/skills` (whole dir)  | `~/dotfiles/claude/skills`      |
+| `~/.claude/skills` (whole dir)  | `~/dotfiles/claude/skills`        |
+
+### How MCP config gets to projects
+
+Claude Code does **not** read `~/.claude/mcp.json` — that path is ignored. The two real MCP config locations are `~/.claude.json` (in your home folder, personal) and `.mcp.json` at a project root (per-project). To make my MCPs available in every project without committing them to each repo:
+
+1. **`install.sh` seeds `.mcp.json` into the current project root** when it's run from inside a git repo other than dotfiles itself. The cloud setup script invokes `install.sh` from the cloned repo, so the file lands in the right place *before* Claude Code launches.
+2. **The `SessionStart` hook in `settings.json`** also drops `.mcp.json` into `$CLAUDE_PROJECT_DIR` if it isn't already there — covers local sessions where `install.sh` wasn't run inside the project.
+3. **`enableAllProjectMcpServers: true`** in `settings.json` auto-approves every MCP from those `.mcp.json` files so I don't get a "trust this server?" prompt every session.
+
+Each seeded `.mcp.json` is added to that repo's `.git/info/exclude` (the per-repo, never-committed equivalent of `.gitignore`) so it doesn't show as untracked in `git status`. If you actually want to commit `.mcp.json` to share with a team, remove the entry from `.git/info/exclude`.
 
 ## What is NOT in here
 
@@ -75,7 +84,7 @@ These were intentionally left out:
 - **`agent-memory/`, `cache/`, `history.jsonl`, `projects/`, `sessions/`, etc.** — local state and history. Tied to a specific machine and would be useless on another one.
 - **`agents/` (custom agents)** — currently unused, kept on the original machine only. Add later if I start using them.
 - **Local stdio MCP servers** — any MCP that runs as a local process (e.g. a tool that shells out to your machine) can't work in a cloud sandbox. Those stay in a separate machine-specific config and are not synced here.
-- **claude.ai Connectors** — MCPs you add under claude.ai → Settings → Connectors are account-level and do *not* inject into Claude Code sessions (verified April 2026). If you need an MCP in Claude Code sessions, add it to `mcp.json` in this repo instead. Currently synced here: **Supabase** and **Vercel** (both remote/http, so they work everywhere).
+- **claude.ai Connectors** — MCPs you add under claude.ai → Settings → Connectors are account-level and do *not* inject into Claude Code sessions (verified April 2026). If you need an MCP in Claude Code sessions, add it to `mcp.json` in this repo instead. Currently synced here: **Supabase**, **Vercel**, **Gmail**, **Google Calendar** (all remote/http, so they work everywhere). Gmail and Google Calendar use OAuth — first use of each prompts a Google sign-in.
 
 ## Windows note
 

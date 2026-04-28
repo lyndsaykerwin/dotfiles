@@ -2,6 +2,7 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
+  "enableAllProjectMcpServers": true,
   "hooks": {
     "SessionStart": [
       {
@@ -9,6 +10,10 @@
           {
             "type": "command",
             "command": "if [ -d /root/dotfiles/.git ]; then git -C /root/dotfiles pull --ff-only --quiet 2>/dev/null || true; fi"
+          },
+          {
+            "type": "command",
+            "command": "MCP_SRC=\"\"; for d in /root/dotfiles ~/dotfiles; do if [ -f \"$d/claude/mcp.json\" ]; then MCP_SRC=\"$d/claude/mcp.json\"; break; fi; done; if [ -n \"$MCP_SRC\" ] && [ -n \"${CLAUDE_PROJECT_DIR:-}\" ] && [ -d \"$CLAUDE_PROJECT_DIR/.git\" ] && [ ! -f \"$CLAUDE_PROJECT_DIR/.mcp.json\" ]; then cp \"$MCP_SRC\" \"$CLAUDE_PROJECT_DIR/.mcp.json\" && grep -qx '.mcp.json' \"$CLAUDE_PROJECT_DIR/.git/info/exclude\" 2>/dev/null || echo '.mcp.json' >> \"$CLAUDE_PROJECT_DIR/.git/info/exclude\"; fi"
           }
         ]
       }

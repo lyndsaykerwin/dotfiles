@@ -17,8 +17,15 @@
 # Targets handled:
 #   ~/.claude/CLAUDE.md     → claude/CLAUDE.md
 #   ~/.claude/settings.json → claude/settings.json
-#   ~/.claude/mcp.json      → claude/mcp.json (stub — see file)
 #   ~/.claude/skills        → claude/skills (whole directory)
+#
+# MCP config: Claude Code does NOT read ~/.claude/mcp.json. The two real
+# MCP config paths are ~/.claude.json (single file in $HOME, personal scope)
+# and .mcp.json at a project root (team/project scope). This script drops
+# claude/mcp.json into the CURRENT working directory as .mcp.json when run
+# from inside a git repo other than dotfiles itself. In cloud sessions the
+# setup script's CWD is the cloned project repo, so this seeds .mcp.json
+# before Claude Code launches and reads MCP config.
 
 set -euo pipefail
 
@@ -117,8 +124,37 @@ echo
 
 link "${DOTFILES_DIR}/claude/CLAUDE.md"     "${CLAUDE_DIR}/CLAUDE.md"
 link "${DOTFILES_DIR}/claude/settings.json" "${CLAUDE_DIR}/settings.json"
-link "${DOTFILES_DIR}/claude/mcp.json"      "${CLAUDE_DIR}/mcp.json"
 link "${DOTFILES_DIR}/claude/skills"        "${CLAUDE_DIR}/skills"
+
+# Clean up the legacy ~/.claude/mcp.json symlink/file if it's still there.
+# Claude Code never reads this path; keeping it around is misleading.
+if [ -e "${CLAUDE_DIR}/mcp.json" ] || [ -L "${CLAUDE_DIR}/mcp.json" ]; then
+  rm -f "${CLAUDE_DIR}/mcp.json"
+  echo "  ✓ removed legacy ~/.claude/mcp.json (Claude Code doesn't read this path)"
+fi
+
+# Seed .mcp.json at the project root if we're being run inside a git repo
+# that isn't dotfiles itself. CWD = project root in cloud sessions (the
+# setup script invokes us from the cloned repo).
+PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+if [ -d "${PROJECT_ROOT}/.git" ] && [ "${PROJECT_ROOT}" != "${DOTFILES_DIR}" ]; then
+  echo
+  echo "[install] Seeding .mcp.json into project root: ${PROJECT_ROOT}"
+  if [ -f "${PROJECT_ROOT}/.mcp.json" ] && same_content "${DOTFILES_DIR}/claude/mcp.json" "${PROJECT_ROOT}/.mcp.json"; then
+    echo "  ✓ .mcp.json already up to date"
+  elif [ -f "${PROJECT_ROOT}/.mcp.json" ]; then
+    echo "  → project already has its own .mcp.json — leaving it alone"
+  else
+    cp "${DOTFILES_DIR}/claude/mcp.json" "${PROJECT_ROOT}/.mcp.json"
+    echo "  ✓ wrote ${PROJECT_ROOT}/.mcp.json"
+    # Keep it out of git status without touching the user's global gitignore.
+    mkdir -p "${PROJECT_ROOT}/.git/info"
+    if ! grep -qx ".mcp.json" "${PROJECT_ROOT}/.git/info/exclude" 2>/dev/null; then
+      echo ".mcp.json" >> "${PROJECT_ROOT}/.git/info/exclude"
+      echo "  ✓ added .mcp.json to ${PROJECT_ROOT}/.git/info/exclude"
+    fi
+  fi
+fi
 
 echo
 if [ -d "${BACKUP_DIR}" ]; then
