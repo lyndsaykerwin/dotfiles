@@ -33,4 +33,6 @@ When creating or updating a skill:
 
 ## Startup
 
-Confirm you read global CLAUDE.md at the start of each session. Include "last updated 4.26" in your confirmation so Lyndsay can verify she's running the latest version.
+Confirm you read global CLAUDE.md at the start of each session. Include "last updated 4.28" in your confirmation so Lyndsay can verify she's running the latest version.
+
+In the same confirmation message, list which MCP servers are connected in this session by name (e.g. "MCPs available: Supabase, Vercel, Gmail, Google Calendar"). If any of those four are missing, flag it explicitly — the dotfiles install dropped a `.mcp.json` and they should all be present. If extras are connected (GitHub, etc.) just include them in the list.

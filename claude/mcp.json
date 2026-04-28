@@ -1,5 +1,6 @@
 {
   "_comment": "Master MCP server list. install.sh copies this file to .mcp.json at the project root of any repo it's run inside, and the SessionStart hook drops it into $CLAUDE_PROJECT_DIR. Only REMOTE (http/sse) MCPs work in Claude Code web sandboxes — local stdio MCPs stay in a separate local-only config. claude.ai → Settings → Connectors does NOT inject into Claude Code sandboxes (verified April 2026).",
+  "_lastUpdated": "2026-04-28",
   "mcpServers": {
     "supabase": {
       "type": "http",

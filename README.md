@@ -67,13 +67,46 @@ Files it manages:
 
 ### How MCP config gets to projects
 
-Claude Code does **not** read `~/.claude/mcp.json` — that path is ignored. The two real MCP config locations are `~/.claude.json` (in your home folder, personal) and `.mcp.json` at a project root (per-project). To make my MCPs available in every project without committing them to each repo:
+#### What Claude Code expects (and what trips people up)
 
-1. **`install.sh` seeds `.mcp.json` into the current project root** when it's run from inside a git repo other than dotfiles itself. The cloud setup script invokes `install.sh` from the cloned repo, so the file lands in the right place *before* Claude Code launches.
-2. **The `SessionStart` hook in `settings.json`** also drops `.mcp.json` into `$CLAUDE_PROJECT_DIR` if it isn't already there — covers local sessions where `install.sh` wasn't run inside the project.
+As of April 2026, Claude Code reads MCP config from exactly two paths and no others:
+
+| Path | Scope |
+| --- | --- |
+| `~/.claude.json` (single file in `$HOME`, **not inside** `~/.claude/`) | Personal — across all your projects on this machine |
+| `.mcp.json` at a project root | Project — shared with anyone who works in that repo |
+
+The trap: `~/.claude/mcp.json` (a file *inside* the `.claude/` folder) **looks like it should work** and is the obvious place to put it, but Claude Code never reads that path. An earlier version of this repo symlinked there and it was a silent no-op — MCPs never loaded. Fixed in commit `8d8b7a6`.
+
+#### What this repo does to bridge the gap
+
+I want my four MCPs (Supabase, Vercel, Gmail, Google Calendar) available in **every** project I work in, on every machine, without committing them to each repo. There's no native "user-scope MCP file" feature in Claude Code that does this — so the dotfiles work around it by *delivering* a `.mcp.json` to wherever I'm working:
+
+1. **`install.sh` seeds `.mcp.json` into the current project root** when it's run from inside a git repo other than dotfiles itself. The cloud session's setup script invokes `install.sh` from the cloned repo, so the file lands in the right place *before* Claude Code launches and reads MCP config — no timing race.
+2. **The `SessionStart` hook in `settings.json`** drops `.mcp.json` into `$CLAUDE_PROJECT_DIR` if it isn't already there — covers local sessions where `install.sh` wasn't run inside the project. SessionStart hooks fire after Claude Code launches, so MCPs may not appear until the *next* session in a brand-new repo, but once seeded the file persists.
 3. **`enableAllProjectMcpServers: true`** in `settings.json` auto-approves every MCP from those `.mcp.json` files so I don't get a "trust this server?" prompt every session.
+4. **Verification**: `CLAUDE.md` instructs Claude to list connected MCPs by name in its session-start confirmation. If Supabase/Vercel/Gmail/Calendar aren't all there, Claude flags it.
 
 Each seeded `.mcp.json` is added to that repo's `.git/info/exclude` (the per-repo, never-committed equivalent of `.gitignore`) so it doesn't show as untracked in `git status`. If you actually want to commit `.mcp.json` to share with a team, remove the entry from `.git/info/exclude`.
+
+#### Why this is a workaround — and when to retire it
+
+This setup is layered specifically because Claude Code (as of April 2026) has no "personal MCPs that follow me into every project" feature. It works, but it's three coordinated mechanisms doing what *should* be one config file.
+
+**Watch for these Claude Code release-note signals that would let us delete most of this:**
+
+- A native user-scope MCP file (e.g. `~/.claude/mcp.json` actually being read, or a documented merge of `~/.claude.json` MCPs into project sessions). Would replace mechanisms 1 and 2 entirely.
+- A "global MCP" or "personal MCP" flag in `claude mcp add`. Same effect.
+- An MCP-loading event after `SessionStart` hooks fire. Would let us drop `install.sh`'s seeding logic and rely solely on the hook with no timing concern.
+- Native auto-approve for personal/user-scope MCPs. Would let us drop `enableAllProjectMcpServers`.
+
+If any of those ship, this section of the README is your sign to simplify. The relevant docs to recheck:
+
+- [Claude Code MCP scopes](https://code.claude.com/docs/en/mcp)
+- [`.claude` directory reference](https://code.claude.com/docs/en/claude-directory)
+- [Settings reference](https://code.claude.com/docs/en/settings)
+- [Hooks reference](https://code.claude.com/docs/en/hooks)
+- [Cloud sessions reference](https://code.claude.com/docs/en/claude-code-on-the-web)
 
 ## What is NOT in here
 
