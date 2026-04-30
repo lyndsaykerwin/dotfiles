@@ -18,7 +18,7 @@
 ## Tools
 
 - **Browser tasks** (navigating sites, filling forms, scraping, testing): use `agent-browser` skill. Never use Chrome extension MCP. Never ask her to sign in or install an extension.
-- **Email (Lyndsay's gmail)**: use Gmail MCP tools directly — not browser automation. Agents have their own Agentmail account (separate from Lyndsay's gmail) for test signups, bookings, and any task where exposing Lyndsay's personal address would be wrong. **Use this instead of Lyndsay's gmail** whenever an email address an agent controls is needed.
+- **Email (Lyndsay's work gmail, `lyndsay@greatelmpartners.com`)**: on Mac sessions, use the custom `mcp__google-workspace-local__gmail_*` tools (local stdio MCP — covers search, draft, send; supports threading and form drafting beyond what the old Anthropic Gmail connector offered). On Claude Code cloud sandboxes there are NO Gmail tools by design — queue email tasks for the next Mac session, or remote-control the Mac from the cloud. Never use browser automation for email. Agents have their own Agentmail account (separate from Lyndsay's gmail) for test signups, bookings, and any task where exposing Lyndsay's personal address would be wrong. **Use Agentmail instead of Lyndsay's gmail** whenever an email address an agent controls is needed.
 - **Credentials file (LOCAL ONLY, not in dotfiles repo):** `~/.claude/agentmail-credentials.json` — read this when you need the address or API key.
 - The credentials file is `chmod 600` and is NOT a symlink into `~/dotfiles/`. **Never** copy its contents into CLAUDE.md, settings.json, mcp.json, skills/, or anywhere else under `~/dotfiles/` — those are published to a public GitHub repo.
 - **Skills lookup**: always run `find-skills` skill before suggesting a custom solution.
@@ -35,6 +35,6 @@ When creating or updating a skill:
 
 ## Startup
 
-Confirm you read global CLAUDE.md at the start of each session. Include "last updated 4.28" in your confirmation so Lyndsay can verify she's running the latest version.
+Confirm you read global CLAUDE.md at the start of each session. Include "last updated 4.30" in your confirmation so Lyndsay can verify she's running the latest version.
 
-In the same confirmation message, list which MCP servers are connected in this session by name (e.g. "MCPs available: Supabase, Vercel, Gmail, Google Calendar"). If any of those four are missing, flag it explicitly — the dotfiles install dropped a `.mcp.json` and they should all be present. If extras are connected (GitHub, etc.) just include them in the list.
+In the same confirmation message, list which MCP servers are connected in this session by name. The three remote MCPs delivered by dotfiles `.mcp.json` are **Supabase, Vercel, Google Calendar** — flag any of those three that are missing. On **Mac sessions only**, the custom `google-workspace-local` stdio MCP (Drive + Docs + Gmail) should also be connected from `~/.claude.json` — flag it if missing. On **cloud sandboxes**, `google-workspace-local` is intentionally absent (stdio servers can't run there); do not flag it. If extras are connected (GitHub, etc.), include them in the list.
