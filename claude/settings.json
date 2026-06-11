@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Write(/Users/lyndsay/.claude/scheduled-tasks/daily-great-elm-inbox-triage/last-run.txt)"
+    ]
   },
   "enableAllProjectMcpServers": true,
   "hooks": {
@@ -54,6 +57,12 @@
     "slack@claude-plugins-official": false
   },
   "autoUpdatesChannel": "latest",
-  "voiceEnabled": true,
-  "skipDangerousModePermissionPrompt": true
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "light-ansi",
+  "agentPushNotifEnabled": true,
+  "voiceEnabled": true
 }
