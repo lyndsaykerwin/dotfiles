@@ -3,7 +3,7 @@
 deliver.py — retention-analysis Phase 5 (deliverable).
 
 Reads compute.py JSON + the long-format CSV and writes a three-sheet
-formula-driven Excel workbook plus a markdown summary.
+formula-driven Excel workbook.
 
 Three sheet-layout modes:
 
@@ -49,15 +49,13 @@ import argparse
 import csv
 import datetime as dt
 import json
-import os
 import sys
-from collections import OrderedDict
 from copy import copy as _copy
 from typing import Any, Dict, List, Tuple
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.comments import Comment
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter, column_index_from_string
 
 
@@ -151,10 +149,6 @@ FMT_PCT = '0.0%;(0.0%);"-"'
 FMT_COUNT = '#,##0;(#,##0);"-"'
 FMT_DATE = "mmm-yy"
 
-THIN = Side(style="thin", color="000000")
-MEDIUM = Side(style="medium", color="000000")
-THICK = Side(style="thick", color="000000")
-
 
 def font_hardcode(bold: bool = False, size: int = 10) -> Font:
     return Font(name="Calibri", size=size, bold=bold, color=COLOR_BLUE)
@@ -241,6 +235,29 @@ def load_long_csv(path: str) -> Tuple[List[str], List[str], Dict[Tuple[str, str]
     return customer_list, month_list, cell
 
 
+def parse_month_cutoff(s: str) -> str:
+    """Parse an --actuals-through value into a canonical 'YYYY-MM' string.
+    Accepts 'YYYY-MM', 'YYYY-MM-DD', 'May-26', 'May 2026', '2026-M5', etc.
+    (survey.py reports the cutoff as e.g. 'May-26')."""
+    s = str(s).strip()
+    for fmt in ("%Y-%m", "%Y-%m-%d", "%b-%y", "%b-%Y", "%B %Y", "%b %Y"):
+        try:
+            d = dt.datetime.strptime(s, fmt).date()
+            return f"{d.year:04d}-{d.month:02d}"
+        except ValueError:
+            continue
+    if "-M" in s:  # '2026-M5'
+        try:
+            y, mm = s.split("-M")
+            return f"{int(y):04d}-{int(mm):02d}"
+        except ValueError:
+            pass
+    raise ValueError(
+        f"Could not parse --actuals-through {s!r}. Use 'YYYY-MM' (e.g. 2026-05) "
+        f"or a month label like 'May-26'."
+    )
+
+
 def month_to_date(month_str: str) -> dt.date:
     y, m = month_str.split("-")[:2]
     return dt.date(int(y), int(m), 1)
@@ -257,8 +274,7 @@ def fmt_month_label(month_str: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def copy_source_sheet_verbatim(src_path: str, src_sheet_name: str | None,
-                               dest_ws) -> None:
+def copy_source_sheet_verbatim(src_path: str, src_ws, dest_ws) -> None:
     """Copy a source worksheet (or CSV) into dest_ws preserving values, number
     formats, fonts, fills, alignment, borders, merged ranges, column widths,
     row heights, and cell comments. Critical Rule 7: zero edits, no
@@ -280,14 +296,6 @@ def copy_source_sheet_verbatim(src_path: str, src_sheet_name: str | None,
                                 cast = val
                     dest_ws.cell(row=r_idx, column=c_idx, value=cast)
         return
-
-    src_wb = load_workbook(src_path, data_only=True, read_only=False)
-    if src_sheet_name is None or src_sheet_name not in src_wb.sheetnames:
-        raise ValueError(
-            f"Source sheet {src_sheet_name!r} not found in {src_path}. "
-            f"Available: {src_wb.sheetnames}"
-        )
-    src_ws = src_wb[src_sheet_name]
 
     for row in src_ws.iter_rows():
         for cell in row:
@@ -366,7 +374,6 @@ def write_analysis_sheet(
     src_last_data_row: int,
     src_first_date_col: str,
     in_scope_types: List[str],
-    all_types: List[str],
     raw_sheet_name: str = "Raw Data",
 ) -> None:
     """Build the Raw Data with Analysis helper sheet.
@@ -377,7 +384,7 @@ def write_analysis_sheet(
       Row 3   # Retained vs N prior  SUMPRODUCT of two-month >0 masks (array)
       Row 4   Check # Active vs Raw  independent recount against Raw Data
       Row 5   blank divider
-      Row 6   Recurring MRR total    SUMIFS(INDEX(...), MATCH(...))
+      Row 6   Recurring MRR total    SUMIFS direct column ref by type
       Row 7   Re-occurring MRR total
       Row 8   Non-recurring MRR total
       Row 9   Total MRR (all types)  = row6+row7+row8
@@ -397,7 +404,6 @@ def write_analysis_sheet(
     last_cust_row = ANALYSIS_FIRST_CUST_ROW + n_cust - 1
 
     src_first_date_idx = column_index_from_string(src_first_date_col)
-    src_last_date_idx = src_first_date_idx + n_months - 1
 
     # Source helper strings — used in every formula
     type_rng = f"'{src_sheet_name}'!${src_type_col}${src_first_data_row}:${src_type_col}${src_last_data_row}"
@@ -490,60 +496,22 @@ def write_analysis_sheet(
 
     # Row 5 — blank divider (intentionally empty)
 
-    # Rows 6/7/8: per-type totals via INDEX/MATCH dynamic column lookup
+    # Rows 6/7/8: per-type totals. Direct column reference per month — each
+    # SUMIFS sums the source's date column for rows matching this type.
     type_rows = [
         (ANALYSIS_ROW_REC, "Recurring"),
         (ANALYSIS_ROW_REOCC, "Re-occurring"),
         (ANALYSIS_ROW_NONREC, "Non-recurring"),
     ]
-    # Build the wide date block range on the source sheet
-    src_block = (
-        f"'{src_sheet_name}'!"
-        f"${get_column_letter(src_first_date_idx)}${src_first_data_row}:"
-        f"${get_column_letter(src_last_date_idx)}${src_last_data_row}"
-    )
-    src_header_row = (
-        f"'{src_sheet_name}'!"
-        f"${get_column_letter(src_first_date_idx)}${src_first_data_row - 1}:"
-        f"${get_column_letter(src_last_date_idx)}${src_first_data_row - 1}"
-    )
 
     for row, type_name in type_rows:
-        # Label in column A, italic-like (just black formula font)
+        # Label in column A (black formula font)
         ws.cell(row=row, column=ANALYSIS_LABEL_COL,
                 value=f"  {type_name}").font = font_formula()
         # If this type isn't in the source at all, still write the row but with
         # SUMIFS that yield 0; useful for the row 10 full-type recon.
         for j in range(n_months):
             col = ANALYSIS_FIRST_MONTH_COL + j
-            col_letter = get_column_letter(col)
-            # Header-cell address (used inside MATCH)
-            header_cell_addr = f"{col_letter}${ANALYSIS_ROW_HDR}"
-            # The header on this sheet is "YYYY-M#"; the header on the source
-            # is a real date or "YYYY-M#" string. To make MATCH work both ways
-            # we encode the analysis sheet's header as the SAME string the source uses.
-            # In the EOS source the header row contains real date values
-            # (e.g. 2021-01-01) — so MATCH would need a date too. We pre-compute
-            # the date and use the source's actual date for the MATCH lookup.
-            # Implementation: write the analysis sheet header as YYYY-MD style AND use
-            # MATCH against a cell on this sheet whose value matches a date in
-            # the source header row. For robustness, the MATCH operates on a
-            # 1-row range; if the source headers are dates and the analysis sheet header
-            # is text, the lookup will fail. To handle that, we MATCH on
-            # DATEVALUE — but DATEVALUE requires text input. Cleanest path:
-            # also write a row 0 hidden helper, but simpler: convert source
-            # headers to text on the analysis sheet via VALUE+TEXT — too brittle.
-            #
-            # Pragmatic choice: emit the analysis sheet header AS a date (Excel-typed)
-            # and let MATCH find it directly. We do this in the header row
-            # writer above by writing as fmt_month_label only as the visible
-            # label, but we ALSO leave a parallel date inside the formula.
-            # That gets ugly fast.
-            #
-            # BEST CHOICE for EOS: use direct column reference for these
-            # summary rows too. The "INDEX/MATCH dynamic" pattern is a nice-to-
-            # have for portability; direct column ref is bulletproof. The
-            # comment row above documents this.
             src_col_letter = get_column_letter(src_first_date_idx + j)
             src_rng_j = (f"'{src_sheet_name}'!"
                          f"${src_col_letter}${src_first_data_row}:"
@@ -641,7 +609,6 @@ def write_corkscrew_sheet_aggregating(
     customers: List[str],
     months_analysis: List[str],
     arr_factor: float,
-    methodology_label: str,
     company: str,
     in_scope_types: List[str],
     analysis_sheet_name: str,
@@ -716,9 +683,12 @@ def write_corkscrew_sheet_aggregating(
         c.fill = fill(SUBHEADER_FILL)
         c.alignment = Alignment(horizontal="center")
 
-    # Rollforward block. NO separate "External Check" row above the rollforward —
-    # the variance at the bottom of the decomposed reconciliation block (row 36)
-    # IS the primary external check. DRY: one check, not two paths to the same algebra.
+    # Rollforward block. Exactly ONE external check is emitted per column:
+    #   - single in-scope type  → ROW_CHECK (row 14) = Ending − period total summed
+    #     independently from the analysis/Raw Data sheet × factor.
+    #   - multiple in-scope types → the variance at the bottom of the decomposed
+    #     reconciliation block (row 36) is the check, with components shown above it.
+    # DRY: one check, never two paths to the same algebra.
     rollforward_labels = {
         ROW_BEGIN: ("Beginning ARR (prior year)", True),     # top-of-block: $
         ROW_NEW: ("  + New customer ARR", False),
@@ -851,6 +821,15 @@ def write_corkscrew_sheet_aggregating(
             c = ws.cell(row=ROW_REC_VARIANCE, column=col, value=f_var)
             c.font = font_formula()
             c.number_format = FMT_NUMBER
+        else:
+            # Single in-scope type → external reconciliation right under Ending.
+            # Ending must equal the period's in-scope total summed independently
+            # from the analysis/Raw Data sheet (a different formula path → a real
+            # check, not the tautological Beginning+moves=Ending identity).
+            f_chk = f"={col_letter}{ROW_END} - SUM({rc})*{arr_ref}"
+            c = ws.cell(row=ROW_CHECK, column=col, value=f_chk)
+            c.font = font_xsheet()
+            c.number_format = FMT_NUMBER
 
     # Section banners (banner row above each block)
     banners = [
@@ -885,6 +864,8 @@ def write_corkscrew_sheet_aggregating(
             ROW_REC_SUM: "Sum customer ARR",
             ROW_REC_VARIANCE: "Variance vs Ending ARR (= 0)",
         })
+    else:
+        rr_labels[ROW_CHECK] = "External Check (Ending - Raw Data) = 0"
     for r, txt in rr_labels.items():
         c = ws.cell(row=r, column=COL_LABEL, value=txt)
         c.font = font_subheader()
@@ -918,29 +899,48 @@ def write_analysis_passthrough_sheet(
     src_date_col_idx = column_index_from_string(src_first_date_col)
     n_months = len(months)
     excl_col = ANALYSIS_FIRST_MONTH_COL + n_months
+    last_cust_row = ANALYSIS_FIRST_CUST_ROW + len(customers) - 1
 
-    # Title
-    title_text = "Raw Data with Analysis — post-exclusion view"
-    center_continuous_across(ws, 1, 1, excl_col,
-                              title_text, font_title(), fill(TITLE_FILL))
-    ws.row_dimensions[1].height = 22
-
-    # Header row at row 3 (row 2 left blank for visual gap)
-    hdr_row = 3
-    hdr_a = ws.cell(row=hdr_row, column=ANALYSIS_LABEL_COL, value="Customer ID")
-    hdr_a.font = font_subheader()
-    hdr_a.fill = fill(SUBHEADER_FILL)
+    # ---- Summary block (rows 1-3) — same shape the Corkscrew HLOOKUPs expect.
+    # Row 1: string month headers ("2022-M1") so HLOOKUP matches the Corkscrew
+    #        date row (also string labels). Row 2: # Active. Row 3: # Retained.
+    hdr_a = ws.cell(row=ANALYSIS_ROW_HDR, column=ANALYSIS_LABEL_COL, value="Customer ID")
+    hdr_a.font = font_subheader(); hdr_a.fill = fill(SUBHEADER_FILL)
+    hdr_a.alignment = Alignment(horizontal="left")
     for j, m in enumerate(months):
-        c = ws.cell(row=hdr_row, column=ANALYSIS_FIRST_MONTH_COL + j, value=month_to_date(m))
-        c.number_format = FMT_DATE
-        c.font = font_subheader()
-        c.fill = fill(SUBHEADER_FILL)
+        c = ws.cell(row=ANALYSIS_ROW_HDR, column=ANALYSIS_FIRST_MONTH_COL + j,
+                    value=fmt_month_label(m))
+        c.font = font_subheader(); c.fill = fill(SUBHEADER_FILL)
         c.alignment = Alignment(horizontal="center")
-    ex_hdr = ws.cell(row=hdr_row, column=excl_col, value="Excluded?")
-    ex_hdr.font = font_subheader()
-    ex_hdr.fill = fill(SUBHEADER_FILL)
+    ex_hdr = ws.cell(row=ANALYSIS_ROW_HDR, column=excl_col, value="Excluded?")
+    ex_hdr.font = font_subheader(); ex_hdr.fill = fill(SUBHEADER_FILL)
 
-    first_data_row = hdr_row + 1
+    # Row 2: # Active customers (COUNTIF on this sheet's customer rows)
+    ws.cell(row=ANALYSIS_ROW_ACTIVE, column=ANALYSIS_LABEL_COL,
+            value="# Active customers").font = font_subheader()
+    for j in range(n_months):
+        cl = get_column_letter(ANALYSIS_FIRST_MONTH_COL + j)
+        c = ws.cell(row=ANALYSIS_ROW_ACTIVE, column=ANALYSIS_FIRST_MONTH_COL + j,
+                    value=f"=COUNTIF({cl}${ANALYSIS_FIRST_CUST_ROW}:{cl}${last_cust_row},\">0\")")
+        c.font = font_formula(); c.number_format = FMT_COUNT
+
+    # Row 3: # Retained vs N-mo prior ("n/a" for the first <lookback> columns)
+    LOOKBACK = 12
+    ws.cell(row=ANALYSIS_ROW_RETAINED, column=ANALYSIS_LABEL_COL,
+            value=f"# Retained vs {LOOKBACK}mo prior").font = font_subheader()
+    for j in range(n_months):
+        col = ANALYSIS_FIRST_MONTH_COL + j
+        cl = get_column_letter(col)
+        if j < LOOKBACK:
+            ws.cell(row=ANALYSIS_ROW_RETAINED, column=col, value="n/a").font = font_formula()
+        else:
+            pl = get_column_letter(col - LOOKBACK)
+            c = ws.cell(row=ANALYSIS_ROW_RETAINED, column=col,
+                        value=(f"=SUMPRODUCT(({cl}${ANALYSIS_FIRST_CUST_ROW}:{cl}${last_cust_row}>0)"
+                               f"*({pl}${ANALYSIS_FIRST_CUST_ROW}:{pl}${last_cust_row}>0))"))
+            c.font = font_formula(); c.number_format = FMT_COUNT
+
+    first_data_row = ANALYSIS_FIRST_CUST_ROW
 
     for i, cust in enumerate(customers):
         r = first_data_row + i
@@ -953,7 +953,7 @@ def write_analysis_passthrough_sheet(
             col = ANALYSIS_FIRST_MONTH_COL + j
             if src_row is not None:
                 src_col_letter = get_column_letter(src_date_col_idx + j)
-                f = (f"=IF('Raw Data'!{src_col_letter}{src_row}=\"\",\"\","
+                f = (f"=IF('Raw Data'!{src_col_letter}{src_row}=\"\",0,"
                      f"'Raw Data'!{src_col_letter}{src_row})")
                 c = ws.cell(row=r, column=col, value=f)
                 c.font = font_xsheet()
@@ -987,9 +987,9 @@ def write_analysis_passthrough_sheet(
     ws.freeze_panes = ws.cell(row=first_data_row, column=ANALYSIS_FIRST_MONTH_COL)
 
 
-def build_customer_to_src_row_map(src_path: str, src_sheet_name: str | None,
-                                  src_customer_col: str,
-                                  src_first_data_row: int) -> Dict[str, int]:
+def build_customer_to_src_row_map(src_path: str, src_customer_col: str,
+                                  src_first_data_row: int, src_ws=None,
+                                  src_last_data_row: int | None = None) -> Dict[str, int]:
     if src_path.lower().endswith(".csv"):
         out: Dict[str, int] = {}
         with open(src_path, "r", encoding="utf-8") as fh:
@@ -1004,16 +1004,13 @@ def build_customer_to_src_row_map(src_path: str, src_sheet_name: str | None,
                     r += 1
         return out
 
-    wb = load_workbook(src_path, data_only=True, read_only=False)
-    if src_sheet_name is None or src_sheet_name not in wb.sheetnames:
-        raise ValueError(
-            f"Source sheet {src_sheet_name!r} not found in {src_path}."
-        )
-    ws = wb[src_sheet_name]
     col_idx = column_index_from_string(src_customer_col)
+    # Stop at src_last_data_row when given, so a summary/total block BELOW the
+    # customer list (within the sheet) isn't scooped up as bogus "customers".
+    last_row = src_last_data_row if src_last_data_row else src_ws.max_row
     out = {}
-    for r in range(src_first_data_row, ws.max_row + 1):
-        v = ws.cell(row=r, column=col_idx).value
+    for r in range(src_first_data_row, last_row + 1):
+        v = src_ws.cell(row=r, column=col_idx).value
         if v is None or v == "":
             continue
         out[str(v).strip()] = r
@@ -1025,43 +1022,22 @@ def build_customer_to_src_row_map(src_path: str, src_sheet_name: str | None,
 # ---------------------------------------------------------------------------
 
 
-def list_types_in_source(src_path: str, src_sheet_name: str,
-                          src_type_col: str, src_first_data_row: int) -> List[str]:
-    """Walk the type column and return unique values in order of first
-    appearance."""
-    wb = load_workbook(src_path, data_only=True, read_only=False)
-    ws = wb[src_sheet_name]
-    col_idx = column_index_from_string(src_type_col)
-    seen: "OrderedDict[str, None]" = OrderedDict()
-    for r in range(src_first_data_row, ws.max_row + 1):
-        v = ws.cell(row=r, column=col_idx).value
-        if v is None:
-            continue
-        s = str(v).strip()
-        if s and s not in seen:
-            seen[s] = None
-    return list(seen.keys())
-
-
-def find_source_last_data_row(src_path: str, src_sheet_name: str,
-                               src_customer_col: str, src_first_data_row: int) -> int:
+def find_source_last_data_row(src_ws, src_customer_col: str,
+                              src_first_data_row: int) -> int:
     """Find the last row in the source where the customer column has a value."""
-    wb = load_workbook(src_path, data_only=True, read_only=False)
-    ws = wb[src_sheet_name]
     col_idx = column_index_from_string(src_customer_col)
     last = src_first_data_row
-    for r in range(src_first_data_row, ws.max_row + 1):
-        if ws.cell(row=r, column=col_idx).value not in (None, ""):
+    for r in range(src_first_data_row, src_ws.max_row + 1):
+        if src_ws.cell(row=r, column=col_idx).value not in (None, ""):
             last = r
     return last
 
 
-def get_source_months(src_path: str, src_sheet_name: str,
-                       src_first_date_col: str, header_row: int = None) -> List[str]:
+def get_source_months(src_ws, src_first_date_col: str,
+                      header_row: int = None) -> List[str]:
     """Read the date headers from the source sheet (the row above first data
     row, or an explicit header_row). Returns 'YYYY-MM' strings."""
-    wb = load_workbook(src_path, data_only=True, read_only=False)
-    ws = wb[src_sheet_name]
+    ws = src_ws
     first_idx = column_index_from_string(src_first_date_col)
     # If header_row not given, try row 1 then row 2.
     rows_to_try = [header_row] if header_row else [1, 2]
@@ -1103,90 +1079,15 @@ def get_source_months(src_path: str, src_sheet_name: str,
 
 
 # ---------------------------------------------------------------------------
-# Markdown writeup
-# ---------------------------------------------------------------------------
-
-
-def write_markdown_writeup(out_path: str, compute: dict, company: str) -> None:
-    cfg = compute.get("config", {})
-    months = cfg.get("month_range", ["?", "?"])
-    n_months = cfg.get("n_months", 0)
-    n_cust = cfg.get("n_customers", 0)
-    period = f"{months[0]} → {months[-1]} ({n_months} months, {n_cust} customers)"
-
-    metrics_monthly = compute.get("metrics_monthly", []) or []
-    metrics_ltm = compute.get("metrics_ltm") or []
-
-    def pct(v):
-        try:
-            return f"{v*100:.1f}%"
-        except Exception:
-            return "-"
-
-    lines = [
-        f"# {company or 'Company'} Retention Summary",
-        "",
-        "## Period studied",
-        f"- {period}",
-        "",
-        "## Headline metrics",
-    ]
-    if metrics_monthly:
-        last = metrics_monthly[-1]
-        lines.append(
-            f"- Monthly (latest): Gross {pct(last.get('gross'))}, "
-            f"Net {pct(last.get('net'))}, Logo {pct(last.get('logo'))} "
-            f"({last.get('month','')})"
-        )
-    if metrics_ltm:
-        last = metrics_ltm[-1]
-        lines.append(
-            f"- LTM (latest): Gross {pct(last.get('gross'))}, "
-            f"Net {pct(last.get('net'))}, Logo {pct(last.get('logo'))} "
-            f"({last.get('month','')})"
-        )
-    if not metrics_monthly and not metrics_ltm:
-        lines.append("- No metrics computed.")
-    lines += ["", "## Period choice rationale"]
-    if metrics_ltm:
-        lines.append(
-            "- LTM presented as headline (≥13 months of history). Monthly trend "
-            "is the diagnostic view."
-        )
-    else:
-        lines.append(
-            "- Monthly only — <13 months of history, LTM cannot be computed."
-        )
-    lines += ["", "## Caveats"]
-    ver = compute.get("verification", {}) or {}
-    l5 = ver.get("layer_5_edge_cases", {}) or {}
-    if l5.get("resurrections"):
-        lines.append(f"- Resurrections: {len(l5['resurrections'])} customer(s) "
-                     "went $0 then returned. Treatment documented.")
-    if l5.get("negatives"):
-        lines.append(f"- Negative values: {len(l5['negatives'])}. Each reviewed "
-                     "with user.")
-    if l5.get("duplicates"):
-        lines.append(f"- Duplicate (customer, month) pairs: {len(l5['duplicates'])}.")
-    if len(lines) > lines.index("## Caveats") + 1:
-        pass
-    else:
-        lines.append("- None flagged.")
-    lines.append("")
-
-    with open(out_path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
-
-
-# ---------------------------------------------------------------------------
 # Top-level deliver()
 # ---------------------------------------------------------------------------
 
 
 def deliver(
-    compute_json_path: str,
     long_csv_path: str,
     output_xlsx_path: str,
+    arr_factor: float = 12.0,
+    compute_json_path: str | None = None,
     company: str = "",
     source_path: str | None = None,
     source_sheet: str | None = None,
@@ -1197,10 +1098,30 @@ def deliver(
     type_filter: List[str] | None = None,
     lookback: int = 12,
     source_header_row: int | None = None,
-) -> Tuple[str, str]:
-    compute = load_compute_json(compute_json_path)
+    source_last_data_row: int | None = None,
+    actuals_through: str | None = None,
+) -> str:
     customers, months, cell = load_long_csv(long_csv_path)
-    arr_factor = float(compute.get("config", {}).get("arr_factor", 12))
+
+    # Actuals cutoff (#2): drop the in-progress current month and any forecast
+    # tail so projections aren't counted as retention. Applies to every mode —
+    # the helper and corkscrew iterate this month list.
+    if actuals_through:
+        cutoff = parse_month_cutoff(actuals_through)
+        kept = [m for m in months if m <= cutoff]
+        if len(kept) < 2:
+            raise ValueError(
+                f"--actuals-through {actuals_through!r} (= {cutoff}) leaves only "
+                f"{len(kept)} month(s) of the {len(months)} in the CSV — need >= 2."
+            )
+        months = kept
+    # compute.py output is OPTIONAL. The workbook is built independently from the
+    # CSV as live formulas; if a compute.json is supplied we only adopt its
+    # arr_factor (the agent can use the rest as an out-of-band cross-check).
+    arr_factor = float(arr_factor)
+    if compute_json_path:
+        compute = load_compute_json(compute_json_path)
+        arr_factor = float(compute.get("config", {}).get("arr_factor", arr_factor))
 
     wb = Workbook()
     ws_cork = wb.active
@@ -1212,31 +1133,43 @@ def deliver(
     elif source_path:
         mode = "passthrough"
 
-    methodology = f"Strict cohort, YoY ({lookback}-month lookback)"
+    # Load the source workbook ONCE (was previously re-read up to 4x). Reused
+    # for the verbatim Raw Data copy and every layout-discovery scan below.
+    src_ws = None
+    if source_path and not source_path.lower().endswith(".csv"):
+        _src_wb = load_workbook(source_path, data_only=True, read_only=False)
+        if source_sheet is None or source_sheet not in _src_wb.sheetnames:
+            raise ValueError(
+                f"Source sheet {source_sheet!r} not found in {source_path}. "
+                f"Available: {_src_wb.sheetnames}"
+            )
+        src_ws = _src_wb[source_sheet]
+
     if mode == "aggregating":
         # Three sheets: Corkscrew, Raw Data with Analysis, Raw Data
         ws_analysis = wb.create_sheet("Raw Data with Analysis")
         ws_raw = wb.create_sheet("Raw Data")
 
         # 1. Raw Data — verbatim
-        copy_source_sheet_verbatim(source_path, source_sheet, ws_raw)
+        copy_source_sheet_verbatim(source_path, src_ws, ws_raw)
 
-        # 2. Discover source layout
-        src_last_row = find_source_last_data_row(
-            source_path, source_sheet, source_customer_col, source_first_data_row
-        )
-        all_types = list_types_in_source(
-            source_path, source_sheet, source_type_col, source_first_data_row
+        # 2. Discover source layout. An explicit --source-last-data-row wins over
+        # auto-detection (#3) — caps the customer block so a summary/total block
+        # below it isn't aggregated in.
+        src_last_row = source_last_data_row or find_source_last_data_row(
+            src_ws, source_customer_col, source_first_data_row
         )
         in_scope = type_filter or ["Recurring", "Re-occurring"]
         # Use the analysis sheet's month list = full source month range
         months_analysis = get_source_months(
-            source_path, source_sheet, source_first_date_col,
-            header_row=source_header_row,
+            src_ws, source_first_date_col, header_row=source_header_row,
         )
         if not months_analysis:
             # Fallback to the long-CSV month list
             months_analysis = months
+        # Honor the actuals cutoff (#2) on the source-derived month list too.
+        if actuals_through:
+            months_analysis = [m for m in months_analysis if m <= parse_month_cutoff(actuals_through)]
 
         # 3. Raw Data with Analysis
         write_analysis_sheet(
@@ -1250,7 +1183,6 @@ def deliver(
             src_last_data_row=src_last_row,
             src_first_date_col=source_first_date_col,
             in_scope_types=in_scope,
-            all_types=all_types,
         )
 
         # 4. Corkscrew
@@ -1259,7 +1191,6 @@ def deliver(
             customers=customers,
             months_analysis=months_analysis,
             arr_factor=arr_factor,
-            methodology_label=methodology,
             company=company,
             in_scope_types=in_scope,
             analysis_sheet_name="Raw Data with Analysis",
@@ -1269,10 +1200,11 @@ def deliver(
     elif mode == "passthrough":
         ws_helper = wb.create_sheet("Raw Data with Analysis")
         ws_raw = wb.create_sheet("Raw Data")
-        copy_source_sheet_verbatim(source_path, source_sheet, ws_raw)
+        copy_source_sheet_verbatim(source_path, src_ws, ws_raw)
 
         customer_to_src_row = build_customer_to_src_row_map(
-            source_path, source_sheet, source_customer_col, source_first_data_row
+            source_path, source_customer_col, source_first_data_row, src_ws,
+            src_last_data_row=source_last_data_row,
         )
         src_customers_in_order = list(customer_to_src_row.keys())
         post_excl = set(map(str, customers))
@@ -1293,7 +1225,6 @@ def deliver(
             customers=customers,
             months_analysis=months,
             arr_factor=arr_factor,
-            methodology_label=methodology,
             company=company,
             in_scope_types=["Recurring"],  # treated as a single-type bucket
             analysis_sheet_name="Raw Data with Analysis",
@@ -1309,7 +1240,6 @@ def deliver(
             customers=customers,
             months_analysis=months,
             arr_factor=arr_factor,
-            methodology_label=methodology,
             company=company,
             in_scope_types=["Recurring"],
             analysis_sheet_name="Raw Data",
@@ -1317,23 +1247,37 @@ def deliver(
         )
 
     wb.save(output_xlsx_path)
-    out_dir = os.path.dirname(os.path.abspath(output_xlsx_path))
-    company_slug = (company or "Company").replace(" ", "_")
-    md_path = os.path.join(out_dir, f"{company_slug}_Retention_Summary.md")
-    write_markdown_writeup(md_path, compute, company)
-    return output_xlsx_path, md_path
+    return output_xlsx_path
 
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description="Retention-analysis Phase 5.")
-    p.add_argument("compute_json")
     p.add_argument("long_csv")
     p.add_argument("output_xlsx")
+    p.add_argument("--arr-factor", type=float, default=12.0,
+                   help="MRR->ARR multiplier (12 for MRR input, 1 for ARR input)")
+    p.add_argument("--compute-json", default=None,
+                   help="OPTIONAL compute.py output. Not required — deliver builds "
+                        "independently from the CSV. If given, its arr_factor "
+                        "overrides --arr-factor.")
     p.add_argument("--company", default="")
+    p.add_argument("--config", default=None,
+                   help="JSON written by survey.py --emit-config. Fills the source-* "
+                        "options and --actuals-through so survey's findings flow "
+                        "straight in; any explicit flag still overrides it.")
     p.add_argument("--source", default=None)
     p.add_argument("--source-sheet", default=None)
     p.add_argument("--source-customer-col", default="A")
     p.add_argument("--source-first-data-row", type=int, default=2)
+    p.add_argument("--source-last-data-row", type=int, default=None,
+                   help="Last row of the customer block in the source (#3). Caps the "
+                        "scan so a summary/total block below the customers isn't "
+                        "treated as customers. Default: scan to the last non-empty row.")
+    p.add_argument("--actuals-through", default=None,
+                   help="Last COMPLETE actual month, e.g. '2026-05' or 'May-26' (#2). "
+                        "Drops the in-progress current month and any forecast tail so "
+                        "projections aren't counted as retention. Feed survey.py's "
+                        "actuals_through here.")
     p.add_argument("--source-first-date-col", default="B")
     p.add_argument("--source-header-row", type=int, default=None,
                    help="Explicit row number of the date-header row "
@@ -1345,17 +1289,27 @@ def parse_args(argv):
                    help="Comma-separated list of in-scope types "
                         "(default: 'Recurring,Re-occurring')")
     p.add_argument("--lookback", type=int, default=12)
+    # Apply survey.py --emit-config values as defaults; explicit CLI flags win.
+    pre, _ = p.parse_known_args(argv)
+    if pre.config:
+        with open(pre.config, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        p.set_defaults(**{k: v for k, v in cfg.items() if v is not None})
     return p.parse_args(argv)
 
 
 def main(argv=None):
+    import time
+    _t0 = time.perf_counter()
     args = parse_args(argv if argv is not None else sys.argv[1:])
     type_filter = (
         [t.strip() for t in args.type_filter.split(",")]
         if args.type_filter else None
     )
-    out_xlsx, out_md = deliver(
-        args.compute_json, args.long_csv, args.output_xlsx,
+    out_xlsx = deliver(
+        args.long_csv, args.output_xlsx,
+        arr_factor=args.arr_factor,
+        compute_json_path=args.compute_json,
         company=args.company,
         source_path=args.source,
         source_sheet=args.source_sheet,
@@ -1366,9 +1320,11 @@ def main(argv=None):
         type_filter=type_filter,
         lookback=args.lookback,
         source_header_row=args.source_header_row,
+        source_last_data_row=args.source_last_data_row,
+        actuals_through=args.actuals_through,
     )
     print(f"Wrote: {out_xlsx}")
-    print(f"Wrote: {out_md}")
+    print(f"[deliver.py] built workbook in {time.perf_counter() - _t0:.2f}s", file=sys.stderr)
     return 0
 
 
